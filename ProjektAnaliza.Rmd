@@ -1,0 +1,469 @@
+---
+title: "Analiza Czasu"
+author: "Radzivon Shkabara"
+date: "2022-12-01"
+output:
+  html_notebook: 
+    fig_caption: yes
+  html_document: default
+editor_options:
+  chunk_output_type: inline
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.path = "figs/")
+```
+
+```{r}
+library(stargazer)
+library(htmltools)
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(hrbrthemes)
+library(viridis)
+library(forcats)
+library(plotly)
+library(rjson) 
+library(lmtest)
+library(knitr)
+library(kableExtra)
+library(shiny)
+library(PerformanceAnalytics)
+library(DT)
+library(reshape2)
+set.seed(2023)
+
+setwd("D:/labSem5/ProjektAnaliza")
+```
+
+# **Dane**
+
+## Dane zostały pobrane z platformy Kaggle i dotyczą tego ile czasu ludzie spędzają z innymi i z kim ten czas spędzają najwięcej .
+
+```{r}
+dane <- read.csv("D:\\labSem5\\ProjektAnaliza\\dane.csv", sep=",")
+```
+
+### **Braki danych**
+
+```{r}
+sum(is.na.data.frame(dane))%>%
+  kable()
+```
+
+W zbiorze nie występują braki danych
+
+## Sposób przedstawienia danych
+
+Ten zbiór danych pokazuje ilość czasu, jaką ludzie w USA zgłaszają, że spędzają w towarzystwie innych osób, w zależności od ich wieku.Dane pochodzą z ankiet dotyczących wykorzystania czasu, w których ludzie są proszeni o wymienienie wszystkich czynności wykonywanych przez nich w ciągu całego dnia oraz osób, które były obecne podczas każdej czynności. Dane są przedstawione w minutach, wiek badanych osób waha się od 15 do 80 lat . Dlatego że dane są pobrane tylko na terenie USA tworzymy tabele tylko z potrzebujących nam danych, dlatego usuwamy 3 pierwsze kolumny.
+
+```{r}
+dane <- dane[-67, -c(1,2,3)]
+
+colnames(dane)<-c('wiek','osobnie','przyjaciele','dzieci','rodzina','partner','współpracownicy')
+
+data_rounded <- dane %>% mutate_at(vars(osobnie:współpracownicy), round, 2)
+
+R<-datatable(data_rounded , options = list(), class = "display",
+    style = "auto", width = NULL, height = NULL, elementId = NULL,
+    fillContainer = getOption("DT.fillContainer", NULL),
+    autoHideNavigation = getOption("DT.autoHideNavigation", NULL),
+    selection = c("multiple", "single", "none"), extensions = list(),
+    plugins = NULL, editable = FALSE)
+R
+```
+
+## **Jakie dane zawiera otrzymana tabela**
+
+##### **Tabela zawiera dane :**
+
+-   wiek
+
+-   osobnie - czas spędzony osobiście
+
+-   przyjaciele - czas spędzony z przyjaciółmi
+
+-   dzieci - czas spędzony z dziećmi
+
+-   rodzina - czas spędzony z rodziną
+
+-   partner - czas spędzony z partnerem/partnerką
+
+-   współpracownicy - czas spędzony z kolegami
+
+# **Wizualizacja danych**
+
+#### **Stworzymy wykres, który przedstawia porównanie różnych zmiennych w tych samych przedziałach czasowych oraz ich trend w ciągu całego życia:**
+
+```{r}
+plot_ly(data = dane, x = ~wiek, y = ~osobnie, name = "Osobnie", type = "scatter", mode = "lines+markers", line = list(width = 1))%>%
+  add_trace(y = ~przyjaciele, name = "Przyjaciele")%>%
+  add_trace(y = ~dzieci, name = "Dzieci")%>%
+  add_trace(y = ~rodzina, name = "Rodzina")%>%
+  add_trace(y = ~partner, name = "Partner")%>%
+  add_trace(y = ~współpracownicy, name = "Współpracownicy")%>%
+  layout(title = "Jak dużo i z kim spędzamy czas w ciągu naszego życia", xaxis = list(title = "Wiek"), yaxis = list(title = "Czas(min)"), font = t, hovermode = "x unified")
+```
+
+Z powstałego wykresu zauważamy, że zmienna osobnie mocno wyróżnia się swoim wzrostem w czasie w porównaniu z pozostałymi zmiennymi, które z kolei w większości albo zaczynają spadać zaraz po osiągnięciu maksimum, albo osiągają swoją maksymalną wartość w przedziale 30-40 lat, z kolei albo utrzymują trend i pozostają na mniej więcej tym samym poziomie, albo rozpoczynają swój spadek.
+
+#### **Zróbmy wykres, który da jasny obraz tego, która zmienna ma największą wagę w swoim przedziale czasowym. Aby to zrobić, tworzymy nowy zbiór danych, w którym tworzymy 6 okresów po 10 lat i bierzemy średnią wartość każdej zmiennej dla każdego okresu**
+
+```{r}
+w15_25 <- subset(dane, wiek >= 15 & wiek <= 25)
+w26_36 <- subset(dane, wiek >= 26 & wiek <= 36)
+w37_47 <- subset(dane, wiek >= 37 & wiek <= 47)
+w48_58 <- subset(dane, wiek >= 48 & wiek <= 58)
+w59_69 <- subset(dane, wiek >= 59 & wiek <= 69)
+w70_80 <- subset(dane, wiek >= 70 & wiek <= 80)
+
+
+w15_25_mean_wiek <- as.numeric(mean(w15_25$wiek))
+w26_36_mean_wiek <- as.numeric(mean(w26_36$wiek))
+w37_47_mean_wiek <- as.numeric(mean(w37_47$wiek))
+w48_58_mean_wiek <- as.numeric(mean(w48_58$wiek))
+w59_69_mean_wiek <- as.numeric(mean(w59_69$wiek))
+w70_80_mean_wiek <- as.numeric(mean(w70_80$wiek))
+
+w15_25_mean <- as.numeric(mean(w15_25$osobnie))
+w26_36_mean <- as.numeric(mean(w26_36$osobnie))
+w37_47_mean <- as.numeric(mean(w37_47$osobnie))
+w48_58_mean <- as.numeric(mean(w48_58$osobnie))
+w59_69_mean <- as.numeric(mean(w59_69$osobnie))
+w70_80_mean <- as.numeric(mean(w70_80$osobnie))
+
+w15_25_mean_przyjaciele <- as.numeric(mean(w15_25$przyjaciele))
+w26_36_mean_przyjaciele <- as.numeric(mean(w26_36$przyjaciele))
+w37_47_mean_przyjaciele <- as.numeric(mean(w37_47$przyjaciele))
+w48_58_mean_przyjaciele <- as.numeric(mean(w48_58$przyjaciele))
+w59_69_mean_przyjaciele <- as.numeric(mean(w59_69$przyjaciele))
+w70_80_mean_przyjaciele <- as.numeric(mean(w70_80$przyjaciele))
+
+w15_25_mean_dzieci <- as.numeric(mean(w15_25$dzieci))
+w26_36_mean_dzieci <- as.numeric(mean(w26_36$dzieci))
+w37_47_mean_dzieci <- as.numeric(mean(w37_47$dzieci))
+w48_58_mean_dzieci <- as.numeric(mean(w48_58$dzieci))
+w59_69_mean_dzieci <- as.numeric(mean(w59_69$dzieci))
+w70_80_mean_dzieci <- as.numeric(mean(w70_80$dzieci))
+
+w15_25_mean_rodzina <- as.numeric(mean(w15_25$rodzina))
+w26_36_mean_rodzina <- as.numeric(mean(w26_36$rodzina))
+w37_47_mean_rodzina <- as.numeric(mean(w37_47$rodzina))
+w48_58_mean_rodzina <- as.numeric(mean(w48_58$rodzina))
+w59_69_mean_rodzina <- as.numeric(mean(w59_69$rodzina))
+w70_80_mean_rodzina <- as.numeric(mean(w70_80$rodzina))
+
+w15_25_mean_partner <- as.numeric(mean(w15_25$partner))
+w26_36_mean_partner <- as.numeric(mean(w26_36$partner))
+w37_47_mean_partner <- as.numeric(mean(w37_47$partner))
+w48_58_mean_partner <- as.numeric(mean(w48_58$partner))
+w59_69_mean_partner <- as.numeric(mean(w59_69$partner))
+w70_80_mean_partner <- as.numeric(mean(w70_80$partner))
+
+w15_25_mean_współpracownicy <- as.numeric(mean(w15_25$współpracownicy))
+w26_36_mean_współpracownicy <- as.numeric(mean(w26_36$współpracownicy))
+w37_47_mean_współpracownicy <- as.numeric(mean(w37_47$współpracownicy))
+w48_58_mean_współpracownicy <- as.numeric(mean(w48_58$współpracownicy))
+w59_69_mean_współpracownicy <- as.numeric(mean(w59_69$współpracownicy))
+w70_80_mean_współpracownicy <- as.numeric(mean(w70_80$współpracownicy))
+
+data <- data.frame(age_group = c("15-25", "26-36", "37-47", "48-58", "59-69", "70-80"), 
+                   osobnie = c(w15_25_mean, w26_36_mean, w37_47_mean, w48_58_mean, w59_69_mean, w70_80_mean),
+                   przyjaciele = c(w15_25_mean_przyjaciele, w26_36_mean_przyjaciele, w37_47_mean_przyjaciele, w48_58_mean_przyjaciele,  
+                   w59_69_mean_przyjaciele, w70_80_mean_przyjaciele),
+                   dzieci = c(w15_25_mean_dzieci, w26_36_mean_dzieci, w37_47_mean_dzieci, w48_58_mean_dzieci, w59_69_mean_dzieci,        
+                   w70_80_mean_dzieci), 
+                   rodzina = c(w15_25_mean_rodzina, w26_36_mean_rodzina, w37_47_mean_rodzina, w48_58_mean_rodzina, w59_69_mean_rodzina,                      w70_80_mean_rodzina),
+                   partner = c(w15_25_mean_partner, w26_36_mean_partner, w37_47_mean_partner, w48_58_mean_partner, w59_69_mean_partner,                      w70_80_mean_partner),
+                   współpracownicy = c(w15_25_mean_współpracownicy, w26_36_mean_współpracownicy, w37_47_mean_współpracownicy, 
+                   w48_58_mean_współpracownicy, w59_69_mean_współpracownicy, w70_80_mean_współpracownicy))
+
+data_rounded2 <- data %>% mutate_at(vars(osobnie:współpracownicy), round, 2)
+
+R1<-datatable(data_rounded2, options = list(), class = "display",
+    style = "auto", width = NULL, height = NULL, elementId = NULL,
+    fillContainer = getOption("DT.fillContainer", NULL),
+    autoHideNavigation = getOption("DT.autoHideNavigation", NULL),
+    selection = c("multiple", "single", "none"), extensions = list(),
+    plugins = NULL, editable = FALSE)
+R1
+```
+
+## **Tworzymy wykres**
+
+```{r}
+ui <- fluidPage(
+  selectInput(inputId = "age_group", label = "Wybierz grupę wiekową",
+              choices = unique(data$age_group)),
+  plotOutput("pie_chart")
+)
+
+server <- function(input, output) {
+  
+  filtered_data <- reactive({
+    data[data$age_group == input$age_group,]
+  })
+  filtered_data_melt <- reactive({
+    melt(filtered_data()[,c("osobnie", "przyjaciele", "dzieci", "rodzina", "partner", "współpracownicy")])
+  })
+  filtered_data_melt_new <- reactive({
+    filtered_data_melt() %>% mutate(percent = value / sum(value) * 100)
+})
+
+
+  
+  output$pie_chart <- renderPlot({
+  ggplot(filtered_data_melt_new(), aes(x = "", y = percent, fill = variable)) +
+    geom_bar(width = 1, stat = "identity") +
+    coord_polar("y", start = 0) +
+    ggtitle(paste("Relacje dla grupy wiekowej", input$age_group)) +
+    theme_void()+
+    scale_fill_manual(values = c("osobnie" = "#8dd3c7", "przyjaciele" = "#fb8072", "dzieci" = "yellow", "rodzina" = "#bebada", "partner" = "purple", "współpracownicy" = "pink"))+
+    geom_text(aes(label = paste(round(value/sum(value)*100),"%")), position = position_stack(vjust = 0.5))
+  })
+}
+
+shinyApp(ui = ui, server = server)
+
+```
+
+Z wykresu widzimy, że niezależnie od tego, w jakiej kategorii wiekowej się znajdujemy, najwięcej czasu spędzamy sami. Dlatego nie będziemy brać go pod uwagę przy dalszej analizie powstałego wykresu. W grupie wiekowej 15-25 lat najistotniejszą zmienną jest rodzina, co oznacza, że w tej grupie wiekowej najwięcej czasu spędzamy z rodziną. I tak dla kategorii 26-26 lat największe znaczenie mają dzieci (22%) i współpracownicy (20%), na trzecim miejscu jest partner (19%). Dla kategorii 37-47 obraz nie uległ większym zmianom, poza tym, że obecnie o 2% więcej czasu poświęca się partnerowi niż współpracownikowi (20% vs. 18%). Dla grupy wiekowej 48-58 lat nie ma zmian w zmiennych partner i współpracownik, w przeciwieństwie do odsetka czasu spędzanego z dziećmi, który spada do 11% w stosunku do pozostałych zmiennych. Dla kategorii wiekowej 59-69 lat główną kategorią jest partner, wyróżnia się on zdecydowanie i zajmuje 26% czasu, podczas gdy pozostałe omawiane zmienne nie przekraczają wartości 10%. w kategorii wiekowej 70-80 lat utrzymuje się ta sama tendencja, podczas gdy udział zmiennej partner wzrasta i wynosi już 29%, wartości pozostałych zmiennych wciąż spadają i nie przekraczają 7% dla każdej z nich. Z naszych obserwacji możemy więc wnioskować, że każdy okres czasu ma swoje główne zmienne, którym osoba poświęca procentowo więcej czasu niż pozostałym zmiennym. Ale która zmienna wyszłaby na prowadzenie, gdybyśmy wzięli pod uwagę cały dostępny nam okres czasu?
+
+#### **W tym celu należy stworzyć nową ramkę danych, w której podsumujemy według kategorii wszystkie dane otrzymane z naszej bazy. I narysujemy wykres porównawczy, który pomoże nam określić, które zmienne mają największy wpływ**
+
+```{r}
+osobnie <- as.numeric(dane$osobnie)
+OS <- sum(osobnie)
+
+przyjaciele <- as.numeric(dane$przyjaciele)
+PR <- sum(przyjaciele)
+
+dzieci <- as.numeric(dane$dzieci)
+DZ <- sum(dzieci)
+
+rodzina <- as.numeric(dane$rodzina)
+RO <- sum(rodzina)
+
+partner <- as.numeric(dane$partner)
+PA <- sum(partner)
+
+wsprac <- as.numeric(dane$współpracownicy)
+WS <- sum(wsprac)
+
+df_sum <- data.frame(PR, DZ, RO, PA, WS)
+df_sum%>%
+  kable()%>%
+  kable_paper()
+```
+
+#### **Tworzymy wykres**
+
+```{r}
+df_melt <- melt(df_sum)
+ggplot(df_melt, aes(x = variable, y = value, fill = variable)) + 
+  geom_col() + 
+  xlab("Kategorii") +
+  ylab("Czas") +
+  ggtitle("Porównanie zmiennych") +
+  theme_classic() +
+  scale_fill_manual(values = c("PR" = "#fb8072", "DZ" = "yellow", "RO" = "#bebada", "PA" = "purple", "WS" = "pink"), labels = c("przyjaciele(PR)", "dzieci(DZ)", "rodzina(RO)", "partner(PA)", "współracownicy(WS)"))+
+  geom_text(aes(label = scales::percent(value/sum(value))), position = position_stack(vjust = 0.5), size = 4)
+
+```
+
+Z naszego wykresu wynika, że spośród zmiennych (bez zmiennej osobnie) najważniejsza w życiu jest zmienna partner (32,5%), następnie zmienna współpacownicy (22,6%) i dzieci (21%).
+
+# **Statystyki opisowe**
+
+Prowadzimy statystyki opisowe dla naszego zbioru danych
+
+```{r}
+df <- dane %>%
+  select(1:3)
+  op <- apply(dane,2, summary)
+  op <- rbind(op, St.dev=apply(df,2,sd))
+  as.data.frame(round(op,2))%>%
+    kable(caption = "Statystyki opisowe")
+
+```
+
+## Stworzymy tabelę korelacji
+
+```{r}
+chart.Correlation(dane, histogram = TRUE, pch = "+")
+```
+
+Z tej tabeli widzimy, że najmocniejszą korelację mają pomiędzy sobą zmienne wiek i osobnie, ьożna też zauważyć, że pomiędzy zmiennymi wiek i osobnie widzimy coś przypominającego zależność liniową. Aby sprawdzić ten argument, utwórzmy nową ramkę danych, z którą utworzymy model liniowy.
+
+## **Model liniowy**
+
+```{r}
+df11 <- data.frame(dane$wiek, dane$osobnie)
+R2<-datatable(df11, options = list(), class = "display",
+    style = "auto", width = NULL, height = NULL, elementId = NULL,
+    fillContainer = getOption("DT.fillContainer", NULL),
+    autoHideNavigation = getOption("DT.autoHideNavigation", NULL),
+    selection = c("multiple", "single", "none"), extensions = list(),
+    plugins = NULL, editable = FALSE)
+R2
+```
+
+#### Wykres liniowej zależności pomiędzy zmiennej wiek a zmiennej osobnie
+
+```{r}
+ggplot(df11, aes(x = df11$dane.wiek, y = df11$dane.osobnie)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Liniowa zależność między czasem spędzonym osobnie a wiekiem")
+```
+
+#### **Tworzymy model liniowy i sprawdzamy korelację pomiędzy zmiennymi**
+
+```{r}
+model1 <- lm(formula = dane.wiek~dane.osobnie, data=df11)
+summary(model1)
+
+cor_val <- cor(df11$dane.wiek, df11$dane.osobnie)
+  kable(data.frame(correlation = sprintf("%.2f (korelację pomiędzy wiek a osobnie)", cor_val)))%>%
+  kable_styling()
+```
+
+Widzimy silną korelację między `wiek` a `osobnie` co potwierdza podejrzenia o liniowej zależności. Z podsumowania modelu możemy wyczytać, że zmienna dane.osobnie jest istotna statystycznie, więc ma ona istotny wpływ na zmienną objaśnianą. Współczynnik $R^2$ jest bardzo bliski jeden więc model faktycznie może być liniowy.
+
+#### **Reszty modelu:**
+
+```{r}
+plot(model1, which=2)
+```
+
+```{r}
+plot(model1, which=3)
+```
+
+```{r}
+plot(model1, which=4)
+```
+
+```{r}
+plot(model1, which=5)
+```
+
+```{r}
+plot(model1, which=6)
+```
+
+## **Testy**
+
+#### Normalność reszt
+
+```{r}
+shapiro.test(model1$residuals)
+```
+
+Test Shapiro Wilka nie odrzuca hipotezy o normalności reszt modelu(p-value \> 0.05).
+
+#### Jednorodność wariancji
+
+```{r}
+bptest(model1)
+gqtest(model1, order.by = fitted(model1), data=df11)
+hmctest(model1)
+```
+
+Test Shapiro-Wilk i Breusch-Pagan sugerują, że hipoteza jednorodności wariancji jest spełniona. Natomiast test Goldfeld-Quandt oraz Harrison-McCabe\` nie dostarczają dowodów przeciwko hipotezie jednorodności wariancji. Wszystkie wartości p-value są większe niż 0,05, co oznacza, że nie ma podstaw, aby odrzucić hipotezę jednorodności wariancji.
+
+#### Autokorelacja błędów
+
+```{r}
+dwtest(model1, data=df11)
+bgtest(model1, order =3, data=df11)
+```
+
+Test Durbina-Watsona ma wartość p mniejszą niż 2.2e-16, co sugeruje, że istnieje dowód na pozytywną autokorelację w resztach modelu. Test Breusch-Godfrey ma bardzo niską wartość p, co wskazuje na istnienie korelacji szeregowej w resztach do rzędu 3. Te wyniki sugerują, że mogą wystąpić problemy z założeniami niezależności i stałej wariancji modelu regresji liniowej. Warto zauważyć, że wartość p dla testu bptest i hmctest jest większa niż 0.05, więc nie jesteśmy w stanie odrzucić hipotezy zerowej, że reszty mają stałą wariancję, i możemy uznać to założenie za spełnione.
+
+#### Liniowa zależność
+
+```{r}
+resettest(model1, data=df11, type='regressor')
+raintest(model1)
+harvtest(model1, order.by = ~fitted(model1))
+```
+
+Test RESET ma wartość p równą 0,6436, co sugeruje brak dowodów na istnienie nieliniowości. Jednak test Rainbow oraz test Harvey-Collier mają bardzo niskie wartości p, co wskazuje na istnienie heteroskedastyczności w resztach modelu. To sugeruje, że wariancja reszt może być zależna od dopasowanych wartości modelu. Te wyniki sugerują, że mogą występować problemy z założeniem jednorodności wariancji w regresji liniowej.
+
+### Spróbujmy więc stworzyć kolejny model na podstawie nowej uproszczonej ramki danych, aby sprawdzić liniowość w naszych danych.
+
+```{r}
+df_mean <- data.frame(wiek = c(w15_25_mean_wiek, w26_36_mean_wiek, w37_47_mean_wiek, w48_58_mean_wiek, w59_69_mean_wiek, w70_80_mean_wiek),
+                             osobnie = c(w15_25_mean, w26_36_mean, w37_47_mean, w48_58_mean, w59_69_mean, w70_80_mean),
+                             przyjaciele = c(w15_25_mean_przyjaciele, w26_36_mean_przyjaciele, w37_47_mean_przyjaciele, w48_58_mean_przyjaciele, w59_69_mean_przyjaciele, w70_80_mean_przyjaciele),
+                             dzieci = c(w15_25_mean_dzieci, w26_36_mean_dzieci, w37_47_mean_dzieci, w48_58_mean_dzieci, w59_69_mean_dzieci, w70_80_mean_dzieci),
+                             rodzina = c(w15_25_mean_rodzina, w26_36_mean_rodzina, w37_47_mean_rodzina, w48_58_mean_rodzina, w59_69_mean_rodzina, w70_80_mean_rodzina),
+                             partner = c(w15_25_mean_partner, w26_36_mean_partner, w37_47_mean_partner, w48_58_mean_partner, w59_69_mean_partner, w70_80_mean_partner),
+                             współpracownicy = c(w15_25_mean_współpracownicy, w26_36_mean_współpracownicy, w37_47_mean_współpracownicy, w48_58_mean_współpracownicy, w59_69_mean_współpracownicy, w70_80_mean_współpracownicy)
+)
+
+```
+
+#### **Tworzymy model liniowy i sprawdzamy korelację pomiędzy zmiennymi**
+
+```{r}
+model3 <- lm(df_mean$wiek~df_mean$osobnie, dane = df_mean)
+summary(model3)
+
+cor_val <- cor(df_mean$wiek, df_mean$osobnie)
+  kable(data.frame(correlation = sprintf("%.2f (korelację pomiędzy wiek a osobnie)", cor_val)))%>%
+  kable_styling()
+```
+
+#### Wykres liniowej zależności pomiędzy zmiennej wiek a zmiennej osobnie
+
+```{r}
+ggplot(df_mean, aes(x = wiek, y = osobnie)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Linear relationship between Time spent alone and Age")
+```
+
+#### Normalność reszt
+
+```{r}
+shapiro.test(model3$residuals)
+```
+
+Test Shapiro Wilka nie odrzuca hipotezy o normalności reszt modelu (p-value \> 0.05).
+
+#### Jednorodność wariancji
+
+```{r}
+bptest(model3)
+gqtest(model3, order.by = fitted(model3), data=df_mean)
+hmctest(model3)
+```
+
+We wszystkich prypadkach p-value \> 0.05, wyniki te sugerują, że założenie o stałej wariancji modelu regresji liniowej jest spełnione w przypadku modelu3
+
+#### Autokorelacja błędów
+
+```{r}
+dwtest(model3, data=df_mean)
+bgtest(model3, order =3, data=df_mean)
+```
+
+Test Durbina-Watsona i test Breuscha-Godfreya dla korelacji seryjnej rzędu do 3 mają wartości p odpowiednio 0,1356 i 0,1949. Te wartości p są większe niż 0,05, co sugeruje, że nie ma wystarczających dowodów, aby stwierdzić, że w resztach modelu występuje autokorelacja.
+
+#### Liniowa zależność
+
+```{r}
+resettest(model3, data=df_mean, type='regressor')
+raintest(model3)
+harvtest(model3, order.by = ~fitted(model3))
+```
+
+Wartości p testu RESET (0,2766) i testu Rainbow (0,1631) oraz testu Harveya-Colliera (0,1995) sugerują, że nie ma wystarczających dowodów na odrzucenie hipotezy zerowej o liniowości modelu.
+
+**Na podstawie modelu3 możemy stwierdzić, że w modelu nie występują problemy z nieliniowością czy heteroscedastycznością. I na podstawie naszych wykresów możemy powiedzieć, że zmienne są bezpośrednio związane z wiekiem osoby, a na podstawie naszych danych, im starsza jest osoba, tym więcej czasu spędza ze swoim partnerem, podczas gdy czas spędzony z przyjaciółmi lub współpracownikami maleje.**
+
+### Dziękuję za uwagę
